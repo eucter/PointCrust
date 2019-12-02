@@ -6,3 +6,9 @@ PointCrust is a WebGL tool, based on three.js library, that converts a point clo
 
 This is a standalone version. Unzip the file and then open index.html in a browser. Chrome might not work because of strict security. Microsoft Edge works.
 Otherwise you need to use the localhost solution.
+
+# Techical Report
+
+You can find the details about the tool in the below link
+
+https://www.researchgate.net/publication/304490188_PointCrust_Web-based_Point_Cloud_to_Mesh_Tool
