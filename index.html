@@ -1,0 +1,828 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+
+  <title>PointCrust - Rendering & Reconstruction</title>
+  <meta name="description" content="PointCrust - Rendering & Reconstruction">
+  <meta name="author" content="Yigit Oktar">
+
+
+
+<script id="vertex-shader" type="x-shader/x-vertex">
+
+uniform mat4 u_matrix;
+attribute vec4 a_vertex;
+attribute vec4 a_color;
+varying vec4 v_color;
+
+void main() {
+
+  gl_PointSize = 1.0;
+
+
+  gl_Position = u_matrix * a_vertex;
+
+
+  v_color = a_color;
+}
+</script>
+
+<script id="fragment-shader" type="x-shader/x-fragment">
+
+precision mediump float;
+varying vec4 v_color;
+void main() {
+  gl_FragColor = v_color;
+}
+</script>
+
+
+<script type="text/javascript" src="lib/jquery.min.js"></script>
+<script type="text/javascript" src="lib/three_sub.js"></script>
+
+<script type="text/javascript" src="lib/marchingcubes.js"></script>
+<script type="text/javascript" src="lib/marchingtetrahedra.js"></script>
+
+
+
+
+<script type="text/javascript" src="lib/testdata.js"></script>
+<script type="text/javascript" src="lib/BufferSubdivisionModifier.js"></script>
+<script type="text/javascript" src="lib/SubdivisionModifier.js"></script>
+
+
+
+
+
+
+<style>
+
+body {
+
+background-color:black;
+font-family: Calibri, Candara, Segoe, 'Segoe UI', Optima, Arial, sans-serif;
+	font-size: 14px;
+	font-style: normal;
+	font-variant: normal;
+	font-weight: 400;
+	line-height: 15.4px;
+color:white;
+}
+
+button:focus {outline:0; min-width:260px; max_width:260px;}
+
+.btn {
+  background: #c7c7c7;
+  background-image: -webkit-linear-gradient(top, #c7c7c7, #4a4a4a);
+  background-image: -moz-linear-gradient(top, #c7c7c7, #4a4a4a);
+  background-image: -ms-linear-gradient(top, #c7c7c7, #4a4a4a);
+  background-image: -o-linear-gradient(top, #c7c7c7, #4a4a4a);
+  background-image: linear-gradient(to bottom, #c7c7c7, #4a4a4a);
+  -webkit-border-radius: 12;
+  -moz-border-radius: 12;
+  border-radius: 12px;
+  font-family: Arial;
+  color: #ffffff;
+  font-size: 20px;
+  padding: 10px 20px 10px 20px;
+  text-decoration: none;
+min-width:260px; max_width:260px;
+}
+
+.btn:hover {
+  background: #3cb0fd;
+  background-image: -webkit-linear-gradient(top, #3cb0fd, #3498db);
+  background-image: -moz-linear-gradient(top, #3cb0fd, #3498db);
+  background-image: -ms-linear-gradient(top, #3cb0fd, #3498db);
+  background-image: -o-linear-gradient(top, #3cb0fd, #3498db);
+  background-image: linear-gradient(to bottom, #3cb0fd, #3498db);
+  text-decoration: none;
+min-width:260px; max_width:260px;
+}
+button[disabled], button[disabled]:hover, button[disabled]:focus, button[disabled]:active {    background: #666666; border-style:hidden;}
+#mn {
+margin-top:10px;
+
+margin-left:auto;
+margin-right:auto;
+background-color: black;
+height:1424px;
+
+}
+
+#lft
+{
+
+float:left;
+
+
+
+background-color:black;
+
+
+
+width:1024px;height:960px;
+}
+#rht
+{
+background-color:#3D3C3A;
+
+height:1224px;
+
+padding:10px;
+
+}
+hr {
+    height: 8px;
+
+    background: #5D5C5A;
+    font-size: 0;
+    border-width: 4px;
+border-color: #3D3C3A;
+    border-style:solid;
+padding-left:2px;
+padding-right:2px;
+  
+}
+canvas
+{
+
+
+float:right;
+}
+
+</style>
+
+</head>
+
+<body>
+
+
+
+
+<div id="mn">
+<table border=0  cellpadding=0>
+<tr>
+<td>
+<div id="rht" style="background-color:#3D3C3A;float:left;padding-top:5px;width:420px;"><h1 style="padding-top:24px;padding-left:4px;">PointCrust</h1><h2 style="padding-left:4px;">point rendering <font style="font-size:16px;">&</font> mesh reconstruction</h2>
+<hr/>
+<br/>
+<center><button class="btn" onclick="bbox()" id="bbox">Get bounding box</button></center>
+<br/>
+<center><button class="btn" onclick="part()" style="display:none;" id="part" hidden>Voxel grid</button></center>
+<br/>
+<center><button class="btn" onclick="march()" style="display:none;" id="march" hidden>Marching cubes</button></center>
+<br/>
+<center><button class="btn" onclick="smooth()" style="display:none;" id="smooth" hidden>Smooth</button></center>
+
+</td>
+<td style="padding-top:0px;" valign="top">
+<div id="lft" >
+<canvas id="gl-canvas" style="width:1024px;height:960px;float:left;">
+Oops ... your browser doesn't support the HTML5 canvas element
+</canvas>
+</div>
+</td>
+
+</table>
+
+
+</div>
+
+
+</div>
+
+
+		<script>
+var container;
+			var camera, scene, renderer, particles,  materials = [], parameters, i, h, color, size;
+			var mouseX = 0, mouseY = 0;
+			var windowHalfX = window.innerWidth / 2;
+			var windowHalfY = window.innerHeight / 2;
+var width = 960;
+var height= 960;
+				var geometry = new THREE.Geometry();
+var mn = 10;
+var partition = [];
+var part_size;
+var box_volume;
+var voxel_boxes = [];
+var voxels = [];
+var pts_real = [];
+
+var box;
+var min_x;
+var max_x;
+var min_y;
+var max_y;
+var min_z;
+var max_z;
+
+var len_x;
+var len_y;
+var len_z;
+
+var cnt_x;
+var cnt_y;
+var cnt_z;
+
+var mxz = 0;
+
+
+var cubic_model;
+var init_model = new THREE.Geometry();
+
+var unit_cube;
+var bin = new Object();
+var matte = new THREE.MeshPhongMaterial( {color: 0x1478ab,  shading:THREE.FlatShading, side:THREE.DoubleSide} );
+var matte_smooth = new THREE.MeshPhongMaterial( {color: 0x1478ab, shading:THREE.SmoothShading, side:THREE.DoubleSide} );
+
+
+var real_voxels =[];
+
+
+
+var delta;
+
+var mesh_model;
+var final_mesh;
+var final_smooth;
+var divisions = 4;
+
+var final_smesh;
+
+
+function smooth()
+{
+
+final_smooth = new THREE.Geometry(mesh_model);
+ 
+	// Next, we need to merge vertices to clean up any unwanted vertex. 
+
+ 
+// Create a new instance of the modifier and pass the number of divisions.
+    modifier = new THREE.SubdivisionModifier(divisions);
+	
+	final_smooth = new THREE.Geometry(mesh_model);
+ 
+	// Next, we need to merge vertices to clean up any unwanted vertex. 
+
+ 
+// Create a new instance of the modifier and pass the number of divisions.
+    modifier = new THREE.SubdivisionModifier(divisions);
+
+ 
+// Apply the modifier to our cloned geometry.
+	modifier.modify( mesh_model );
+	final_smesh = new THREE.Mesh( mesh_model, matte_smooth  );
+ 
+
+
+	
+	
+	scene.remove(final_mesh);
+	scene.add(final_smesh);
+
+$("#smooth").prop('disabled', true);
+
+
+}
+
+
+
+function march()
+{
+
+var volume = cloudData();
+var mesh = MarchingCubes(volume.data, volume.dims);
+
+
+mesh_model = new THREE.Geometry();
+
+for(var i=0; i<mesh.vertices.length; i++)
+{
+var cv = mesh.vertices[i];
+
+
+var xx = cv[0]*part_size+min_x-delta-part_size/2;
+var yy = cv[1]*part_size+min_y-delta-part_size/2;
+var zz = cv[2]*part_size+min_z-delta-part_size/2;
+
+var vtx = new THREE.Vector3(xx,yy,zz);
+mesh_model.vertices.push(vtx);
+
+}
+for(var i=0; i<mesh.faces.length; i++)
+{
+var cf = mesh.faces[i];
+var f1 = cf[0];
+var f2 = cf[1];
+var f3 = cf[2];
+
+mesh_model.faces.push(new THREE.Face3( f3, f1, f2 ));
+
+
+}
+mesh_model.mergeVertices();
+mesh_model.computeFaceNormals();
+mesh_model.computeVertexNormals();
+
+
+	final_mesh = new THREE.Mesh(mesh_model,matte);
+	// Just in case we want to get the low poly version back.
+
+
+	scene.remove(cubic_model);
+	scene.add(final_mesh);
+
+console.log(mesh);
+
+
+$("#march").prop('disabled', true);
+$("#smooth").css('display', "block");
+}
+
+
+function cloudData()
+{
+ 
+	
+	delta = part_size*2.5;
+	
+	 hdims = [[(min_x)-delta, (max_x)+delta, part_size],[(min_y)-delta, (max_y)+delta, part_size],[(min_z)-delta, Math.ceil(max_z)+delta, part_size]];
+      var res = new Array(3);
+      for(var i=0; i<3; ++i) {
+        res[i] = Math.ceil((hdims[i][1] - hdims[i][0]) / hdims[i][2]);
+      }
+	  //console.log(hdims);
+      var volume = new Float32Array(res[0] * res[1] * res[2])
+        , n = 0;
+      for(var k=0, z=hdims[2][0]-hdims[2][2]; k<res[2]; ++k, z+=hdims[2][2])
+      for(var j=0, y=hdims[1][0]-hdims[1][2]; j<res[1]; ++j, y+=hdims[1][2])
+      for(var i=0, x=hdims[0][0]-hdims[0][2]; i<res[0]; ++i, x+=hdims[0][2], ++n) {
+        volume[n] = getb(x,y,z);
+      }
+      return {data: volume, dims:res};
+
+	
+	
+	
+}
+
+ function getb(x,y,z) {
+ 
+
+ 	cx = Math.round((x)/part_size);
+	cy = Math.round((y)/part_size);
+	cz = Math.round((z)/part_size);
+		  
+		  if(bin[cx+":"+cy+":"+cz] ===2)
+		  {
+			
+			  //console.log(cx+ " "+cy+" "+cz);
+			  return 1;
+			  
+			  }
+		  else
+			  return 0;
+		  
+
+    }
+
+
+
+
+function vox()
+{
+
+    half_size = part_size/2;
+	
+	
+	///// mark bins
+	for(var i=0; i<vertices.length; i=i+1)
+	{
+		
+		var cver = vertices[i];
+		
+		cx = Math.round((cver.x)/part_size);
+		cy = Math.round((cver.y)/part_size);
+		cz = Math.round((cver.z)/part_size);
+		
+		//console.log(cx+" "+cy+" "+cz);
+		bin[cx+":"+cy+":"+cz] = 2;
+	
+
+	}
+	
+	
+	/////
+	
+	
+	
+	for(var b=0; b<voxels.length; b=b+1)
+	{
+	var cnt = 0;
+	var cbox = voxels[b].position;
+	cx = Math.round((cbox.x)/part_size);
+	cy = Math.round((cbox.y)/part_size);
+	cz = Math.round((cbox.z)/part_size);
+	//console.log(cx+" "+cy+" "+cz);
+		if(bin[cx+":"+cy+":"+cz] ===2)
+		{
+			cnt=cnt+1;
+			real_voxels.push(voxels[b]);
+			
+			voxels[b].updateMatrix();
+			init_model.merge(voxels[b].geometry,voxels[b].matrix);
+			
+			
+
+			
+					
+			
+			
+
+		}
+
+
+	
+	}
+	init_model.mergeVertices();
+	init_model.computeFaceNormals();
+	init_model.computeVertexNormals();
+	cubic_model = new THREE.Mesh(init_model,matte);
+	
+	scene.add(cubic_model);
+	
+	
+	
+	
+	
+	/////////////////////////////////////
+	/////////////////////////////////////
+	/* BRUTE FORCE: AVOID THIS!!!
+	for(var b=0; b<voxels.length; b=b+1)
+	{
+	if(b%1000==0)
+    console.log(b);
+	
+	cbox = voxels[b].position;
+	//voxel_boxes[b].visible = false;
+	for(var i=0; i<vertices.length; i=i+1)
+	{
+	    cver = vertices[i];
+		
+		if(  ((cver.x>=(cbox.x-half_size)) && (cver.x<=(cbox.x+half_size))) && ((cver.y>=(cbox.y-half_size)) && (cver.y<=(cbox.y+half_size)))&& ((cver.z>=(cbox.z-half_size)) && (cver.z<=(cbox.z+half_size))))
+	    {
+		
+		scene.add(voxels[b]);
+		break;
+		
+		}
+
+
+	}
+	
+	}
+	*/
+	/////////////////////////////////////
+	/////////////////////////////////////
+
+
+scene.remove(particles);
+$("#march").css('display', "block");
+
+
+}
+
+
+
+
+
+
+
+
+
+function part()
+{
+
+object = new THREE.Geometry();
+
+unit_cube =  new THREE.BoxGeometry(1,1,1);
+unit_cube.computeFaceNormals();
+unit_cube.computeVertexNormals();
+unit_cube.faces[0].color.set(0xaa11bb);
+unit_cube.faces[1].color.set(0x11aabb);
+unit_cube.faces[2].color.set(0xaabb11);
+unit_cube.faces[3].color.set(0x11bbaa);
+unit_cube.faces[4].color.set(0xbb11aa);
+unit_cube.faces[5].color.set(0xbbaa11);
+
+
+cnt_x = len_x/part_size;
+cnt_y = len_y/part_size;
+cnt_z = len_z/part_size;
+
+var material = new THREE.MeshPhongMaterial( {color: 0x3498db, shading:THREE.FlatShading} );
+material.shading = THREE.FlatShading;
+var half_len =part_size/2;
+
+
+
+for(var x=0; x<cnt_x; x=x+1)
+{
+    console.log(x);
+    for(var y=0; y<cnt_y; y=y+1)
+    {
+     for(var z=0; z<cnt_z; z=z+1)
+      {
+   
+      var voxel = new THREE.Mesh( unit_cube , material );
+     
+
+     // var voxel_box = new THREE.BoxHelper(voxel);
+     // voxel_box.material.color.set(0x3498db);
+
+	 // voxel_boxes.push(voxel_box);
+	  
+	  
+	  voxel.scale.set(part_size,part_size,part_size);
+      voxel.position.x = min_x + x*part_size +half_len;
+      voxel.position.y = min_y + y*part_size +half_len;
+      voxel.position.z = min_z + z*part_size +half_len;
+      voxels.push(voxel);
+	  
+	  
+      //scene.add( voxel_box );
+      
+     
+      }
+    }
+
+}
+
+$("#part").prop('disabled', true);
+
+//$("#vox").css('display', "block");
+
+vox();
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function bbox()
+{
+
+vertices = geometry.vertices;
+min_x = vertices[0].x;
+max_x = vertices[0].x;
+min_y = vertices[0].y;
+max_y = vertices[0].y;
+min_z = vertices[0].z;
+max_z = vertices[0].z;
+
+
+
+
+
+for(var i=1; i<vertices.length; i=i+1)
+{
+ var curr = vertices[i];
+ if(curr.x>max_x)
+  max_x = curr.x;
+ if(curr.x<min_x)
+  min_x = curr.x;
+
+ if(curr.y>max_y)
+  max_y = curr.y;
+ if(curr.y<min_y)
+  min_y = curr.y;
+
+ if(curr.z>max_z)
+  max_z = curr.z;
+ if(curr.z<min_z)
+  min_z = curr.z;
+
+
+
+
+}
+
+
+bgm = new THREE.BoxGeometry(max_x-min_x, max_y-min_y, max_z-min_z);
+
+len_x = max_x-min_x;
+len_y = max_y-min_y;
+len_z = max_z-min_z;
+
+
+var material = new THREE.MeshPhongMaterial( {color: 0x2488bb, shading:THREE.FlatShading} );
+material.shading =THREE.FlatShading;
+cuber = new THREE.Mesh( bgm, material );
+cuber.position.x = (max_x+min_x)/2;
+cuber.position.y = (max_y+min_y)/2;
+cuber.position.z = (max_z+min_z)/2;
+
+box_volume = (max_x-min_x)*(max_y-min_y)*(max_z-min_z);
+part_size = Math.ceil(Math.pow(box_volume/Math.pow(14,3),1/3));
+half_len = part_size/2;
+box = new THREE.BoxHelper(cuber);
+box.material.color.set(0x3498db);
+
+
+scene.add( box );
+$("#bbox").prop('disabled', true);
+
+$("#part").css('display', "block");
+
+}
+
+
+				loadGeometry();
+		
+			function init() {
+				container = $('#lft');
+				camera = new THREE.PerspectiveCamera( 75, width/ height, 1, 3000 );
+				scene = new THREE.Scene();
+				scene.fog = new THREE.FogExp2( 0x222222, 0.0002 );
+				
+				
+
+				camera.position.z = 800;
+
+				
+				/*
+				for ( i = 0; i < 20000; i ++ ) {
+					var vertex = new THREE.Vector3();
+
+					vertex.x = 250*(i)/20000;
+					vertex.y = 250*(i)/20000;
+					vertex.z = 125*((1-i))/20000+ (Math.random() * 900 - 450);
+					geometry.vertices.push( vertex );
+				}
+				*/
+				
+				
+				     
+					materials[0] = new THREE.PointsMaterial( { size: 5, transparent:true, sizeAttenuation:true, opacity:0.4 } );
+					particles = new THREE.Points( geometry, materials[0] );
+				
+					scene.add( particles );
+
+					for(var i=-1; i<=1;i=i+1)
+					{
+					for(var i2=0; i2<=1;i2=i2+1)
+					{
+					
+					for(var i3=-1; i3<=1;i3=i3+1)
+					{
+					var light = new THREE.DirectionalLight( 0xffffff,0.265); 
+					light.position.set(i,i2,i3)
+					scene.add( light );
+					}
+					}
+					
+					
+					}
+var light = new THREE.AmbientLight( 0x000000); // soft white light
+scene.add( light );
+
+				
+				renderer = new THREE.WebGLRenderer();
+				renderer.setPixelRatio( 1 );
+				renderer.setSize( width, height );
+				container.html( renderer.domElement );
+				
+			
+				document.addEventListener( 'mousemove', onDocumentMouseMove, false );
+				document.addEventListener( 'touchstart', onDocumentTouchStart, false );
+				document.addEventListener( 'touchmove', onDocumentTouchMove, false );
+				//
+				window.addEventListener( 'resize', onWindowResize, false );
+			}
+			function onWindowResize() {
+				
+			}
+			function onDocumentMouseMove( event ) {
+				mouseX = event.clientX - windowHalfX;
+				mouseY = event.clientY - windowHalfY;
+			}
+			function onDocumentTouchStart( event ) {
+				if ( event.touches.length === 1 ) {
+					event.preventDefault();
+					mouseX = event.touches[ 0 ].pageX - windowHalfX;
+					mouseY = event.touches[ 0 ].pageY - windowHalfY;
+				}
+			}
+			function onDocumentTouchMove( event ) {
+				if ( event.touches.length === 1 ) {
+					event.preventDefault();
+					mouseX = event.touches[ 0 ].pageX - windowHalfX;
+					mouseY = event.touches[ 0 ].pageY - windowHalfY;
+				}
+			}
+			//
+			function animate() {
+				requestAnimationFrame( animate );
+				render();
+		
+			}
+			function render() {
+				var time = Date.now() * 0.00005;
+				camera.position.x += ( -mouseX - camera.position.x ) * 0.05;
+				camera.position.y += ( + mouseY - camera.position.y ) * 0.05;
+				camera.lookAt( scene.position );
+		
+				renderer.render( scene, camera );
+			}
+
+                        
+
+			
+if(window.addEventListener){
+    window.addEventListener('mousewheel',wheel,false);
+}
+
+function wheel(event)
+{
+    event.preventDefault();
+    event.returnValue=false;
+}
+window.onmousewheel=document.onmousewheel=wheel;
+$('#lft').bind('mousewheel', function(e){
+
+    if(e.originalEvent.wheelDelta  > 0) {
+        camera.position.z-=20;
+    }
+    else{
+        camera.position.z+=20;
+    }
+});
+
+
+function loadGeometry()
+{
+
+ $.get('data/bunny.txt', function(data) {
+   parseIt(data);
+   //console.log(data);
+});
+   
+
+
+
+}
+var arrLines;
+function parseIt(data)
+{
+
+arrLines = data.split("\n");
+console.log(arrLines.length);
+
+    for (var i = 0; i < arrLines.length; i=i+1) {
+	
+	var ver = arrLines[i].split(',');
+	
+					var vertex = new THREE.Vector3();
+
+					vertex.x = 2000*parseFloat(ver[0]);
+				    vertex.y = 2000*parseFloat(ver[1])-200;
+					vertex.z = 2000*parseFloat(ver[2]);
+					
+					
+						console.log(vertex.x+" "+vertex.y+" "+vertex.z);
+
+					
+					geometry.vertices.push( vertex );
+		
+        //alert("Line #" + (i + 1) + " is: '" + curLine + "'");
+    }
+	console.log("done");
+			init();
+			animate();
+
+}
+
+
+		</script>
+
+</body>
+</html>
